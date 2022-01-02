@@ -23,14 +23,16 @@ def prepareTrainValidateTestSplitDataset(trainPercentage, validatePercentage, te
         imageCount = MAX_IMAGE_SET
         print(imageCount)
 
-    listRandom = [*range(imageCount)]
+    baseFilenameList = [i.split('.')[0] for i in imageList[:imageCount]]
+
+    listRandom = baseFilenameList.copy()
     random.shuffle(listRandom)
 
     # finding images that metadata exists
     metaAvail = np.zeros(imageCount, dtype=bool)
     for i in range(imageCount):
-        metaFilename = os.path.join(METADATA_DIR, ('%05d.json' % (i + 1)))
-        imageFilename = os.path.join(IMAGE_DIR, ('%05d.jpg' % (i + 1)))
+        metaFilename = os.path.join(METADATA_DIR, '%s.json' % baseFilenameList[i])
+        imageFilename = os.path.join(IMAGE_DIR, '%s.jpg' % baseFilenameList[i])
         if os.path.isfile(metaFilename) and os.path.isfile(imageFilename) :
             metaAvail[i] = True
 
@@ -42,9 +44,8 @@ def prepareTrainValidateTestSplitDataset(trainPercentage, validatePercentage, te
     testSetImageCount = int(round(imageCount * testPercentage))
 
     count = 0
-    random.shuffle(listRandom)
     for i in range(imageCount):
-        idx = listRandom[i]
+        idx = baseFilenameList.index(listRandom[i])
         if metaAvail[idx]:
             valSet[idx] = True
             count = count + 1
@@ -54,7 +55,7 @@ def prepareTrainValidateTestSplitDataset(trainPercentage, validatePercentage, te
     count = 0
     random.shuffle(listRandom)
     for i in range(imageCount):
-        idx = listRandom[i]
+        idx = baseFilenameList.index(listRandom[i])
         if metaAvail[idx] and valSet[idx] != True:
             testSet[idx] = True
             count = count + 1
@@ -67,15 +68,13 @@ def prepareTrainValidateTestSplitDataset(trainPercentage, validatePercentage, te
     testSetFilename = open(TEST_SET_FILENAME, 'w')
     validationSetFilename = open(VALIDATION_SET_FILENAME, 'w')
     for i in range(imageCount):
-        if(i == 1201):
-            print("1201", metaAvail[i])
         if metaAvail[i]:
             if valSet[i]:
-                validationSetFilename.write("%05d\n" % (i + 1))
+                validationSetFilename.write("%s\n" % (baseFilenameList[i]))
             elif testSet[i]:
-                testSetFilename.write("%05d\n" % (i + 1))
+                testSetFilename.write("%s\n" % (baseFilenameList[i]))
             else:
-                trainSetFilename.write("%05d\n" % (i + 1))
+                trainSetFilename.write("%s\n" % (baseFilenameList[i]))
     trainSetFilename.close()
     testSetFilename.close()
     validationSetFilename.close()

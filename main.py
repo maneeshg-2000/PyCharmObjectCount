@@ -1,6 +1,8 @@
 from common.ImageDataSetSplit import prepareTrainValidateTestSplitDataset
 from common.readDataset import readTrainData
-from common.ImageFileIO import readFileWithJson
+from common.readDataset import readValidationData
+from common.readDataset import readTestData
+
 from ImageModule.CNNModule import *
 from ImageModule.ResnetModule import *
 from ImageModule.SiasmeModule import *
@@ -27,8 +29,15 @@ def show_choices():
 
 
 def mainMenu():
+
     prepareTrainValidateTestSplitDataset(0.7,0.1,0.2)
-    readTrainData()
+    trainData = readTrainData()
+    validationData = readValidationData()
+    testData = readTestData()
+    print ("Train Data", trainData)
+    print("Validation Data", validationData)
+    print("testData", testData)
+
     while(True):
         show_choices()
         choice = input('Enter choice(1-7,X): ')

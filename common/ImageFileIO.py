@@ -14,10 +14,9 @@ def readFileWithJson (filename):
         print("Error: Incorrect Filename")
         return;
 
-    print("File Name is \n", filename)
     metaFilename = os.path.join(METADATA_DIR, ('%s.json' % filename))
     imageFilename = os.path.join(IMAGE_DIR, ('%s.jpg' % filename))
 
     metadata = json.loads(open(metaFilename).read())
     quantity = metadata['EXPECTED_QUANTITY']
-    print("Quanity in Image Met", quantity)
+    return [filename,quantity]
