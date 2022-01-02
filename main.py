@@ -2,6 +2,8 @@ from common.ImageDataSetSplit import prepareTrainValidateTestSplitDataset
 from common.readDataset import readTrainData
 from common.readDataset import readValidationData
 from common.readDataset import readTestData
+from common.ImageOperation import resizeImages
+from common.ImageOperation import convertRGB2HSVImages
 
 from ImageModule.CNNModule import *
 from ImageModule.ResnetModule import *
@@ -25,11 +27,18 @@ def show_choices():
     print('5. Count with ResNet and PreProcess')
     print('6. Count with Siasme and PreProcess')
     print('7. Print Comparison')
+    print('p. Preprocess Input Images')
     print('X. Exit')
+
+def oneTimeImageProcessing():
+    # Resize all images to 224x244, One time operation, so commenting call
+    #resizeImages()
+
+    # Convert RGB to HSV Images
+    convertRGB2HSVImages()
 
 
 def mainMenu():
-
     prepareTrainValidateTestSplitDataset(0.7,0.1,0.2)
     trainData = readTrainData()
     validationData = readValidationData()
@@ -40,7 +49,7 @@ def mainMenu():
 
     while(True):
         show_choices()
-        choice = input('Enter choice(1-7,X): ')
+        choice = input('Enter choice(1-7,p,X): ')
         if choice == '1':
             countWithCNN()
             print("Count with CNN")
@@ -62,6 +71,9 @@ def mainMenu():
         elif choice == '7':
             compareAllAlgo()
             print("Show Comparison")
+        elif choice == 'p':
+            oneTimeImageProcessing()
+            print("Preprocess Images")
         else:
             print('Invalid input')
             break
@@ -69,5 +81,3 @@ def mainMenu():
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     mainMenu()
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
