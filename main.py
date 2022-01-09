@@ -1,13 +1,41 @@
-from common.ImageDataSetSplit import prepareTrainValidateTestSplitDataset
-from common.readDataset import readTrainData
-from common.readDataset import readValidationData
-from common.readDataset import readTestData
-from common.ImageOperation import resizeImages
-from common.ImageOperation import convertRGB2HSVImages
+# Imports
+import argparse
+import inspect
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+import matplotlib.pyplot as plt
 
+from DataLoadingUtils import TensorflowDataGenerator
+import tensorflow_datasets as tfds
+import pandas as pd
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+
+from concurrent.futures import ThreadPoolExecutor
+
+from common.ImageDataSetSplit import *
 from ImageModule.CNNModule import *
 from ImageModule.ResnetModule import *
-from ImageModule.SiasmeModule import *
+from ImageModule.SiasmeVGGModule import *
+
+
+model_dictionary = {m[0]:m[1] for m in inspect.getmembers(tf.keras.applications, inspect.isfunction)}
+model_names = model_dictionary.keys()
+
+parser = argparse.ArgumentParser(description='Image Object Counting Model')
+parser.add_argument('--model', '-m', metavar='MODEL', default='VGG16', choices=model_names, help='model architecture: ' + ' | '.join(model_names) + ' (default: VGG16)')
+parser.add_argument('-j', '--workers', default=8, type=int, metavar='N', help='number of data loading workers (default: 4)')
+parser.add_argument('--epochs', default=30, type=int, metavar='N', help='number of total epochs to run')
+parser.add_argument('-b', '--batch_size', default=128, type=int, metavar='N', help='mini-batch size (default: 256)')
+parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', help='initial learning rate')
+parser.add_argument('--lrd','--learning-rate-decay-step', default=10, type=int, metavar='N', help='learning rate decay epoch')
+parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
+parser.add_argument('--max-target', default=20, type=int, metavar='N', help='maximum number of target images for validation (default: 20)')
+parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', help='weight decay (default: 1e-4)')
+parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', help='print frequency (default: 10)')
+parser.add_argument('--resume', default='', type=str, metavar='PATH', help='path to latest checkpoint (default: none)')
+parser.add_argument('--evaluate', default=False, type=bool, metavar='BOOL', help='evaluate or train')
 
 def compareAllAlgo():
     print("compareAllAlgo -->")
@@ -30,22 +58,45 @@ def show_choices():
     print('p. Preprocess Input Images')
     print('X. Exit')
 
-def oneTimeImageProcessing():
+def oneTimeImageProcssing():
     # Resize all images to 224x244, One time operation, so commenting call
-    #resizeImages()
+    #resizeImages()˳
 
     # Convert RGB to HSV Images
-    convertRGB2HSVImages()
+    #convertRGB2HSVImages()
+    return
 
 
 def mainMenu():
+    global args
+    args = parser.parse_args()
+
+    # create model
+    print("=> creating model '{}'".format(args.model))
+
+    model_func = model_dictionary[args.model]
+    print("Building Model")
+    model = model_func()
+
+    model.compile('adam', loss='mse')
     prepareTrainValidateTestSplitDataset(0.7,0.1,0.2)
+
+    training_generator = TensorflowDataGenerator(IMAGE_DIR,TRAIN_SET_FILENAME,32)
+    validation_generator = TensorflowDataGenerator(IMAGE_DIR,VALIDATION_SET_FILENAME,32)
+
+    model.fit_generator(generator=training_generator,
+                    validation_data=validation_generator,
+                    use_multiprocessing=True,
+                    workers=12)
+
+    """
     trainData = readTrainData()
     validationData = readValidationData()
     testData = readTestData()
     print ("Train Data", trainData)
     print("Validation Data", validationData)
     print("testData", testData)
+
 
     while(True):
         show_choices()
@@ -77,6 +128,7 @@ def mainMenu():
         else:
             print('Invalid input')
             break
+"""
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':

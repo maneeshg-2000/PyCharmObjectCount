@@ -1,5 +1,5 @@
 # Input Dataset
-IMAGE_DIR = "../ImageDataSet/bin-images/"
+IMAGE_DIR = "../ImageDataSet//bin-images"
 METADATA_DIR = "../ImageDataSet/metadata/"
 RESIZED_IMAGE_DIR = "../ImageDataSet/bin-images_224/"
 RESIZED_IMAGE_DIR_HSV = "../ImageDataSet/bin-images_224_HSV/"
