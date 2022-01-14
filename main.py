@@ -11,6 +11,7 @@ from keras.utils.vis_utils import plot_model
 from keras.preprocessing import image
 from keras.models import Model
 from keras.layers import Input, Flatten, Dense
+import pandas as pd
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -34,9 +35,9 @@ model_names = model_dictionary.keys()
 
 parser = argparse.ArgumentParser(description='Image Object Counting Model')
 parser.add_argument('--model', '-m', metavar='MODEL', default='VGG16', choices=model_names, help='model architecture: ' + ' | '.join(model_names) + ' (default: VGG16)')
-parser.add_argument('--epochs', default=5, type=int, metavar='N', help='number of total epochs to run')
+parser.add_argument('--epochs', default=10, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N', help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch_size', default=16, type=int, metavar='N', help='mini-batch size (default: 32)')
+parser.add_argument('-b', '--batch_size', default=128, type=int, metavar='N', help='mini-batch size (default: 32)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', help='initial learning rate')
 parser.add_argument('--lrd','--learning-rate-decay-step', default=10, type=int, metavar='N', help='learning rate decay epoch')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
@@ -56,27 +57,32 @@ def oneTimeImageProcssing():
     #convertRGB2HSVImages()
     return
 
-model_dictionary_preprocess = {m[0]:m[1] for m in inspect.getmembers(tf.keras.applications, inspect.ismodule)}
+model_dictionary_modules = {m[0]:m[1] for m in inspect.getmembers(tf.keras.applications, inspect.ismodule)}
+
 
 def predictTestDataSet(modelname, model, filenameList):
     datafile = open(filenameList, "r")
     content_list = datafile.read().splitlines()
+    testResult = []
 
     for filename in content_list:
         metaFilename = os.path.join(METADATA_DIR, ('%s.json' % filename))
         imageFilename = os.path.join(IMAGE_DIR, ('%s.jpg' % filename))
 
         img = image.load_img(imageFilename, target_size=(224, 224))
-        x = image.img_to_array(img)
-        x = np.expand_dims(x, axis=0)
-        x = model_dictionary_preprocess[modelname.lower()].preprocess_input(x)
+        img_x = image.img_to_array(img)
+        img_x = np.expand_dims(img_x, axis=0)
+        img_x = model_dictionary_modules[modelname.lower()].preprocess_input(img_x)
 
         metadata = json.loads(open(metaFilename).read())
         actualQuantity = metadata['EXPECTED_QUANTITY']
 
-        predictedQuantity = model.predict(x)
+        predictedQuantity = model.predict(img_x)
         predictedQuantity = np.argmax(predictedQuantity)
-        print("Actual:%d - Predicted:%d",format(actualQuantity),format(predictedQuantity))
+        testResult.append([filename, actualQuantity, predictedQuantity])
+
+    testResultDF = pd.DataFrame(testResult, columns=["filename", "ActualQuantity", "PredictedQuantity"])
+    return testResultDF
 
 def plotModelEvalMetric(hist, metric):
     # plotting training and validation metric
@@ -112,7 +118,7 @@ def mainMenu():
     base_model.summary()
 
     # Add a layer where input is the output of the  second last layer
-    x = Dense(8, activation='softmax', name='predictions')(base_model.layers[-2].output)
+    x = tf.keras.layers.Dense(8, activation='softmax', name='predictions')(base_model.layers[-2].output)
 
     # Then create the corresponding model
     my_model = Model(inputs=base_model.input, outputs=x)
@@ -134,40 +140,59 @@ def mainMenu():
 
     my_model.compile(loss='mse',optimizer=optimizer, metrics=['accuracy', 'mse'])
 
-    # checkpoint
-    callbacks_list = [
-        tf.keras.callbacks.EarlyStopping(patience=2),
-        tf.keras.callbacks.ModelCheckpoint(
-            filepath=os.path.join("./",date.today().strftime("%m-%d-%Y"),'model.{epoch:02d}-{mse:.2f}.h5'),
-            monitor='mse',
-            verbose=1,
-            save_best_only=True,
-            mode='max'),
-        tf.keras.callbacks.TensorBoard(log_dir='./logs'),
-    ]
+    if  args.resume:
+        if os.path.isfile(args.resume):
+            print("ADD Code to resume from saved checkpoint")
+            my_model = keras.models.load_model(args.resume)
 
-    training_generator = TensorflowDataGenerator(IMAGE_DIR,TRAIN_SET_FILENAME,args.model,args.batch_size)
-    validation_generator = TensorflowDataGenerator(IMAGE_DIR,VALIDATION_SET_FILENAME,args.model,args.batch_size)
-
-    hist = my_model.fit(x=training_generator,
-                validation_data=validation_generator,
-                epochs=args.epochs,
+        else:
+            print("Resume: Incorrect_Path")
+    else:
+        # checkpoint
+        callbacks_list = [
+            tf.keras.callbacks.EarlyStopping(patience=2),
+            tf.keras.callbacks.ModelCheckpoint(
+                filepath=os.path.join("./",date.today().strftime("%m-%d-%Y"),'model.{epoch:02d}-{mse:.2f}.h5'),
+                monitor='mse',
                 verbose=1,
-                use_multiprocessing=True,
-                callbacks=callbacks_list,
-                initial_epoch= args.start_epoch,
-                workers=args.workers)
+                save_best_only=True,
+                mode='max'),
+            tf.keras.callbacks.TensorBoard(log_dir='./logs'),
+        ]
 
-    #plotModelEvalMetric(hist, 'loss')
-    #plotModelEvalMetric(hist, 'accuracy')
-    #plotModelEvalMetric(hist, 'mse')
+        training_generator = TensorflowDataGenerator(IMAGE_DIR,TRAIN_SET_FILENAME,args.model,args.batch_size)
+        validation_generator = TensorflowDataGenerator(IMAGE_DIR,VALIDATION_SET_FILENAME,args.model,args.batch_size)
 
-    #print('Final training loss \t', str(round((hist.history['loss'][-1]),2))+ ' %')
-    #print('Final Training accuracy ', str(round((hist.history['accuracy'][-1]*100),2))+ ' %')
-    #print('Final Validation loss \t', str(round((hist.history['val_loss'][-1]),2))+ ' %')
-    #print('Final Validation accuracy ', str(round((hist.history['val_accuracy'][-1]*100),2))+ '%')
+        hist = my_model.fit(x=training_generator,
+                    validation_data=validation_generator,
+                    epochs=args.epochs,
+                    verbose=1,
+                    use_multiprocessing=True,
+                    callbacks=callbacks_list,
+                    initial_epoch= args.start_epoch,
+                    workers=args.workers)
 
-    predictTestDataSet(args.model, my_model, TEST_SET_FILENAME)
+        #print('Final training loss \t', str(round((hist.history['loss'][-1]),2))+ ' %')
+        #print('Final Training accuracy ', str(round((hist.history['accuracy'][-1]*100),2))+ ' %')
+        #print('Final Validation loss \t', str(round((hist.history['val_loss'][-1]),2))+ ' %')
+        #print('Final Validation accuracy ', str(round((hist.history['val_accuracy'][-1]*100),2))+ '%')
+
+        #plotModelEvalMetric(hist, 'loss')
+        #plotModelEvalMetric(hist, 'accuracy')
+        #plotModelEvalMetric(hist, 'mse')
+
+        os.makedirs(INTERMEDIATE_DIR, exist_ok=True)
+        my_model.save((INTERMEDIATE_DIR + args.model +".h5"))
+
+    testResultDF = predictTestDataSet(args.model, my_model, TEST_SET_FILENAME)
+    testResultDF.to_csv(INTERMEDIATE_DIR +"allClassResult.csv", sep=',', index=False, header=True)
+
+    for i in range(len(ClassTestFileName)):
+        testResultDF = predictTestDataSet(args.model, my_model,
+                                          (TEST_SET_CLASS_BASED_FILENAME + ClassTestFileName[i] + ".txt"))
+        testResultDF.to_csv((TEST_SET_CLASS_BASED_FILENAME + ClassTestFileName[i] + "result.csv"), sep=',', index=False,
+                            header=True)
+
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':

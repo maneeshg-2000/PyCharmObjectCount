@@ -11,15 +11,6 @@ from collections import Counter
 import matplotlib.pyplot as plt
 
 from common.Constants import *
-
-ClassTestFileName = [ TEST_SET_CLASS_BASED_FILENAME + "_Zero" + ".txt",
-                 TEST_SET_CLASS_BASED_FILENAME + "_One" + ".txt",
-                 TEST_SET_CLASS_BASED_FILENAME + "_Two" + ".txt",
-                 TEST_SET_CLASS_BASED_FILENAME + "_Three" + ".txt",
-                 TEST_SET_CLASS_BASED_FILENAME + "_Four" + ".txt",
-                 TEST_SET_CLASS_BASED_FILENAME + "_Five" + ".txt",
-                 TEST_SET_CLASS_BASED_FILENAME + "_Six" + ".txt"]
-
 def dataVisualization():
 
     imageList = os.listdir(IMAGE_DIR)
@@ -84,11 +75,11 @@ def prepareTrainValidateTestSplitDataset(image_df, trainPercentage, validatePerc
                                              int(testPercentage*len(image_df))])
 
     # writing out to textfile
-    os.makedirs(INTERMEDIATE_DIS, exist_ok=True)
+    os.makedirs(INTERMEDIATE_DIR, exist_ok=True)
     trainDF['filename'].to_csv(TRAIN_SET_FILENAME, sep=' ', index=False, header=False)
     vaidationDF['filename'].to_csv(VALIDATION_SET_FILENAME, sep=' ', index=False, header=False)
     testDF['filename'].to_csv(TEST_SET_FILENAME, sep=' ', index=False, header=False)
 
     for i in range(len(ClassTestFileName)):
         tempDF = testDF[testDF['Quantity'] == i]
-        tempDF['filename'].to_csv(ClassTestFileName[i], sep=' ', index=False, header=False)
+        tempDF['filename'].to_csv((TEST_SET_CLASS_BASED_FILENAME + ClassTestFileName[i] + ".txt"), sep=' ', index=False, header=False)
