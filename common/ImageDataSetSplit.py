@@ -42,6 +42,9 @@ def dataVisualization():
     image_df = pd.DataFrame(filterImageList, columns=["filename", "Quantity", "ItemTypeCount"])
     image_df["Quantity"].hist(xlabelsize=6, ylabelsize=6)
     image_df["ItemTypeCount"].hist(xlabelsize=6, ylabelsize=6)
+    plt.savefig(INTERMEDIATE_DIR+"ImageDistribution.jpg")
+    plt.show()
+
 
     print("The distribution of the number of file as per Quanity for each image:")
     print(Counter(image_df.Quantity.values))

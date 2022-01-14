@@ -12,6 +12,10 @@ from keras.preprocessing import image
 from keras.models import Model
 from keras.layers import Input, Flatten, Dense
 import pandas as pd
+from keras.callbacks import CSVLogger
+import sklearn
+from sklearn.metrics import ConfusionMatrixDisplay
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -35,9 +39,9 @@ model_names = model_dictionary.keys()
 
 parser = argparse.ArgumentParser(description='Image Object Counting Model')
 parser.add_argument('--model', '-m', metavar='MODEL', default='VGG16', choices=model_names, help='model architecture: ' + ' | '.join(model_names) + ' (default: VGG16)')
-parser.add_argument('--epochs', default=10, type=int, metavar='N', help='number of total epochs to run')
+parser.add_argument('--epochs', default=3, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N', help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch_size', default=128, type=int, metavar='N', help='mini-batch size (default: 32)')
+parser.add_argument('-b', '--batch_size', default=4, type=int, metavar='N', help='mini-batch size (default: 32)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', help='initial learning rate')
 parser.add_argument('--lrd','--learning-rate-decay-step', default=10, type=int, metavar='N', help='learning rate decay epoch')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
@@ -84,17 +88,18 @@ def predictTestDataSet(modelname, model, filenameList):
     testResultDF = pd.DataFrame(testResult, columns=["filename", "ActualQuantity", "PredictedQuantity"])
     return testResultDF
 
-def plotModelEvalMetric(hist, metric):
+def plotModelEvalMetric(modelName, trainMetricHistory, validationMetricHistory, metricName):
     # plotting training and validation metric
-    loss = hist.history[metric]
-    val_loss = hist.history['val_' + metric]
-    epochs = range(1, len(loss) + 1)
-    plt.plot(epochs, loss, color='red', label='Training ' + metric )
-    plt.plot(epochs, val_loss, color='green', label='Validation' + metric)
-    plt.title('Training and Validation '+ metric)
+    #loss = history[metric]
+    #val_loss = history['val_' + metric]
+    epochs = range(1, len(trainMetricHistory) + 1)
+    plt.plot(epochs, trainMetricHistory, color='red', label='Training ' + metricName )
+    plt.plot(epochs, validationMetricHistory, color='green', label='Validation' + metricName)
+    plt.title('Training and Validation '+ metricName)
     plt.xlabel('Epochs')
-    plt.ylabel(metric)
+    plt.ylabel(metricName)
     plt.legend()
+    plt.savefig(INTERMEDIATE_DIR+modelName+metricName+".jpg")
     plt.show()
 
 def mainMenu():
@@ -130,23 +135,24 @@ def mainMenu():
         decay_rate=args.lrd)
     optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule, momentum=args.momentum)
 
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            my_model.load_weights(args.resume)
-        else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
-            return
 
     my_model.compile(loss='mse',optimizer=optimizer, metrics=['accuracy', 'mse'])
 
-    if  args.resume:
+    if args.resume:
         if os.path.isfile(args.resume):
-            print("ADD Code to resume from saved checkpoint")
+            print("=> loading checkpoint '{}'".format(args.resume))
             my_model = keras.models.load_model(args.resume)
+            filename, file_extension = os.path.splitext(args.resume)
+            filename = filename + "_trainHistory.csv"
+            if os.path.isfile(args.resume):
+                train_history = pd.read_csv(filename, sep=',', engine='python')
+                print(train_history)
+            else:
+                print("training history is not available")
 
         else:
-            print("Resume: Incorrect_Path")
+            print("=> no checkpoint found at '{}'".format(args.resume))
+            return
     else:
         # checkpoint
         callbacks_list = [
@@ -158,6 +164,7 @@ def mainMenu():
                 save_best_only=True,
                 mode='max'),
             tf.keras.callbacks.TensorBoard(log_dir='./logs'),
+            CSVLogger((INTERMEDIATE_DIR + args.model +"_trainHistory.csv"), separator=',', append=False)
         ]
 
         training_generator = TensorflowDataGenerator(IMAGE_DIR,TRAIN_SET_FILENAME,args.model,args.batch_size)
@@ -171,27 +178,36 @@ def mainMenu():
                     callbacks=callbacks_list,
                     initial_epoch= args.start_epoch,
                     workers=args.workers)
+        train_history = hist.history
 
-        #print('Final training loss \t', str(round((hist.history['loss'][-1]),2))+ ' %')
-        #print('Final Training accuracy ', str(round((hist.history['accuracy'][-1]*100),2))+ ' %')
-        #print('Final Validation loss \t', str(round((hist.history['val_loss'][-1]),2))+ ' %')
-        #print('Final Validation accuracy ', str(round((hist.history['val_accuracy'][-1]*100),2))+ '%')
-
-        #plotModelEvalMetric(hist, 'loss')
-        #plotModelEvalMetric(hist, 'accuracy')
-        #plotModelEvalMetric(hist, 'mse')
+        print('Final training loss \t', str(round((hist.history['loss'][-1]),2))+ ' %')
+        print('Final Training accuracy ', str(round((hist.history['accuracy'][-1]*100),2))+ ' %')
+        print('Final Validation loss \t', str(round((hist.history['val_loss'][-1]),2))+ ' %')
+        print('Final Validation accuracy ', str(round((hist.history['val_accuracy'][-1]*100),2))+ '%')
 
         os.makedirs(INTERMEDIATE_DIR, exist_ok=True)
         my_model.save((INTERMEDIATE_DIR + args.model +".h5"))
 
+
+    plotModelEvalMetric(args.model,train_history["loss"],train_history["val_loss"], 'loss')
+    plotModelEvalMetric(args.model,train_history["accuracy"],train_history["val_accuracy"], 'accuracy')
+    plotModelEvalMetric(args.model,train_history["mse"],train_history["val_mse"], 'mse')
+
     testResultDF = predictTestDataSet(args.model, my_model, TEST_SET_FILENAME)
     testResultDF.to_csv(INTERMEDIATE_DIR +"allClassResult.csv", sep=',', index=False, header=True)
+
+
+    ConfusionMatrixDisplay.from_predictions(testResultDF["ActualQuantity"], testResultDF["PredictedQuantity"])
+    plt.savefig(INTERMEDIATE_DIR+args.model+"AllClassResultConfMetric.jpg")
 
     for i in range(len(ClassTestFileName)):
         testResultDF = predictTestDataSet(args.model, my_model,
                                           (TEST_SET_CLASS_BASED_FILENAME + ClassTestFileName[i] + ".txt"))
         testResultDF.to_csv((TEST_SET_CLASS_BASED_FILENAME + ClassTestFileName[i] + "result.csv"), sep=',', index=False,
                             header=True)
+        if(testResultDF.shape[0]):
+            ConfusionMatrixDisplay.from_predictions(testResultDF["ActualQuantity"], testResultDF["PredictedQuantity"])
+            plt.savefig(INTERMEDIATE_DIR + args.model + ClassTestFileName[i]+"ConfMetric.jpg")
 
 
 # Press the green button in the gutter to run the script.
