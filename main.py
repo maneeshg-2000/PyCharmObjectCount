@@ -1,20 +1,17 @@
 # Imports
 import argparse
 import inspect
-import tensorflow as tf
+from datetime import date
+
 import keras
+import tensorflow as tf
+from keras.callbacks import CSVLogger
+from keras.models import Model
+from keras.preprocessing import image
+from sklearn.metrics import ConfusionMatrixDisplay
+
 from DataLoadingUtils import TensorflowDataGenerator
 from common.ImageDataSetSplit import *
-from keras.callbacks import ModelCheckpoint
-from datetime import date
-from keras.utils.vis_utils import plot_model
-from keras.preprocessing import image
-from keras.models import Model
-from keras.layers import Input, Flatten, Dense
-import pandas as pd
-from keras.callbacks import CSVLogger
-import sklearn
-from sklearn.metrics import ConfusionMatrixDisplay
 
 
 class AverageMeter(object):
@@ -39,11 +36,11 @@ model_names = model_dictionary.keys()
 
 parser = argparse.ArgumentParser(description='Image Object Counting Model')
 parser.add_argument('--model', '-m', metavar='MODEL', default='VGG16', choices=model_names, help='model architecture: ' + ' | '.join(model_names) + ' (default: VGG16)')
-parser.add_argument('--epochs', default=3, type=int, metavar='N', help='number of total epochs to run')
+parser.add_argument('--epochs', default=10, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N', help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch_size', default=4, type=int, metavar='N', help='mini-batch size (default: 32)')
+parser.add_argument('-b', '--batch_size', default=10, type=int, metavar='N', help='mini-batch size (default: 32)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', help='initial learning rate')
-parser.add_argument('--lrd','--learning-rate-decay-step', default=10, type=int, metavar='N', help='learning rate decay epoch')
+parser.add_argument('--lrd','--learning-rate-decay-step', default=8, type=int, metavar='N', help='learning rate decay epoch')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
 parser.add_argument('--max-target', default=20, type=int, metavar='N', help='smaximum number of target images for validation (default: 20)')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', help='weight decay (default: 1e-4)')
@@ -100,7 +97,7 @@ def plotModelEvalMetric(modelName, trainMetricHistory, validationMetricHistory, 
     plt.ylabel(metricName)
     plt.legend()
     plt.savefig(INTERMEDIATE_DIR+modelName+metricName+".jpg")
-    plt.show()
+    #plt.show()
 
 def mainMenu():
     global args
@@ -156,10 +153,10 @@ def mainMenu():
     else:
         # checkpoint
         callbacks_list = [
-            tf.keras.callbacks.EarlyStopping(patience=2),
+            #tf.keras.callbacks.EarlyStopping(patience=2),
             tf.keras.callbacks.ModelCheckpoint(
                 filepath=os.path.join("./",date.today().strftime("%m-%d-%Y"),'model.{epoch:02d}-{mse:.2f}.h5'),
-                monitor='mse',
+                monitor='val_accuracy',
                 verbose=1,
                 save_best_only=True,
                 mode='max'),
@@ -174,7 +171,7 @@ def mainMenu():
                     validation_data=validation_generator,
                     epochs=args.epochs,
                     verbose=1,
-                    use_multiprocessing=True,
+                    use_multiprocessing=False,
                     callbacks=callbacks_list,
                     initial_epoch= args.start_epoch,
                     workers=args.workers)
@@ -188,14 +185,12 @@ def mainMenu():
         os.makedirs(INTERMEDIATE_DIR, exist_ok=True)
         my_model.save((INTERMEDIATE_DIR + args.model +".h5"))
 
-
     plotModelEvalMetric(args.model,train_history["loss"],train_history["val_loss"], 'loss')
     plotModelEvalMetric(args.model,train_history["accuracy"],train_history["val_accuracy"], 'accuracy')
     plotModelEvalMetric(args.model,train_history["mse"],train_history["val_mse"], 'mse')
 
     testResultDF = predictTestDataSet(args.model, my_model, TEST_SET_FILENAME)
     testResultDF.to_csv(INTERMEDIATE_DIR +"allClassResult.csv", sep=',', index=False, header=True)
-
 
     ConfusionMatrixDisplay.from_predictions(testResultDF["ActualQuantity"], testResultDF["PredictedQuantity"])
     plt.savefig(INTERMEDIATE_DIR+args.model+"AllClassResultConfMetric.jpg")
@@ -211,5 +206,17 @@ def mainMenu():
 
 
 # Press the green button in the gutter to run the script.
+import sys
+
+import tensorflow.keras
+import tensorflow as tf
+import numpy as np
 if __name__ == '__main__':
+    print(f"Tensor Flow Version: {tf.__version__}")
+    print(f"Keras Version: {tensorflow.keras.__version__}")
+    print()
+    print(f"Python {sys.version}")
+    gpu = len(tf.config.list_physical_devices('GPU')) > 0
+    print("GPU is", "available" if gpu else "NOT AVAILABLE")
+
     mainMenu()

@@ -1,13 +1,12 @@
-import hashlib
 import os
-import platform
-import shutil
-import time
 import json
-import random
-import numpy as np
 
 from common.Constants import *
+import json
+import os
+
+from common.Constants import *
+
 
 def readFileWithJson (filename):
     if not filename:

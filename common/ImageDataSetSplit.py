@@ -1,21 +1,20 @@
-import hashlib
-import os
-import platform
-import shutil
-import time
 import json
-import random
+import os
+from collections import Counter
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from collections import Counter
-import matplotlib.pyplot as plt
 
 from common.Constants import *
+
+
 def dataVisualization():
 
     imageList = os.listdir(IMAGE_DIR)
     imageCount = len(imageList)
     #quantity_hist = np.zeros(500, dtype=int)
+    print("DIR Listing Complete")
 
 
     if ((MAX_IMAGE_SET != "ALL")  and (imageCount > MAX_IMAGE_SET)):
@@ -26,6 +25,8 @@ def dataVisualization():
     filterImageList = []
 
     for i in range(imageCount):
+        if int(i%1000)==0:
+            print("Files Processed %d/%d",i,imageCount)
         metaFilename = os.path.join(METADATA_DIR, '%s.json' % baseFilenameList[i])
         imageFilename = os.path.join(IMAGE_DIR, '%s.jpg' % baseFilenameList[i])
         if (os.path.isfile(metaFilename) and os.path.isfile(imageFilename)) == False:
@@ -43,7 +44,7 @@ def dataVisualization():
     image_df["Quantity"].hist(xlabelsize=6, ylabelsize=6)
     image_df["ItemTypeCount"].hist(xlabelsize=6, ylabelsize=6)
     plt.savefig(INTERMEDIATE_DIR+"ImageDistribution.jpg")
-    plt.show()
+    #plt.show()
 
 
     print("The distribution of the number of file as per Quanity for each image:")

@@ -1,4 +1,3 @@
-from common.Constants import *
 from common.ImageFileIO import *
 
 def readTrainData():
