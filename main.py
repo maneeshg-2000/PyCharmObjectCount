@@ -18,7 +18,7 @@ model_dictionary = {m[0]:m[1] for m in inspect.getmembers(tf.keras.applications,
 model_names = model_dictionary.keys()
 
 parser = argparse.ArgumentParser(description='Image Object Counting Model')
-parser.add_argument('--model', '-m', metavar='MODEL', default='InceptionResNetV2', choices=model_names, help='model architecture: ' + ' | '.join(model_names) + ' (default: ResNet50)')
+parser.add_argument('--model', '-m', metavar='MODEL', default='ResNet50', choices=model_names, help='model architecture: ' + ' | '.join(model_names) + ' (default: ResNet50)')
 parser.add_argument('--epochs', default=10, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N', help='manual epoch number (useful on restarts)')
 parser.add_argument('-b', '--batch_size', default=4, type=int, metavar='N', help='mini-batch size (default: 32)')
@@ -87,6 +87,11 @@ def train_validate_test_split(df, train_percent=.8, validate_percent=.1, seed=No
     validate = df.iloc[train_end:validate_end]
     test = df.iloc[validate_end:]
     return train, validate, test
+
+class CustomSaver(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs={}):
+        print(logs["val_accuracy"])
+        #self.model.save("model_{}.hd5".format(epoch))
 
 def mainMenu():
     global args
@@ -165,7 +170,15 @@ def mainMenu():
             print("=> no checkpoint found at '{}'".format(args.resume))
             return
     else:
-        datagen = ImageDataGenerator(featurewise_std_normalization=False, rescale=1. / 255, horizontal_flip=True, )
+        datagen = ImageDataGenerator(featurewise_std_normalization=False,
+                                     rescale=1. / 255,
+                                     rotation_range=20,
+                                     width_shift_range=0.2,
+                                     height_shift_range=0.2,
+                                     brightness_range=[0.7,1.3],
+                                     shear_range=0.2,
+                                     horizontal_flip=True,
+                                     fill_mode='nearest')
 
         train_generator = datagen.flow_from_dataframe(
             dataframe=train_df,
@@ -189,6 +202,8 @@ def mainMenu():
         STEP_SIZE_TRAIN = train_generator.n // train_generator.batch_size
         STEP_SIZE_VALID = val_generator.n // val_generator.batch_size
         STEP_SIZE_TEST = test_generator.n // test_generator.batch_size
+
+        saver = CustomSaver()
 
         callbacks_list = [
             tf.keras.callbacks.CSVLogger(os.path.join(snapshot_path,"trainHistory.csv"), separator=',', append=False),
