@@ -14,19 +14,18 @@ def dataVisualization():
     imageList = os.listdir(IMAGE_DIR)
     imageCount = len(imageList)
     #quantity_hist = np.zeros(500, dtype=int)
-    print("DIR Listing Complete")
+    print("DIR Listing Complete %d" %(imageCount))
 
-
-    if ((MAX_IMAGE_SET != "ALL")  and (imageCount > MAX_IMAGE_SET)):
-        imageCount = MAX_IMAGE_SET * 2 #Reading twice the files of Max allowed set so that post filtering we get required data set
+    if ((MAX_TRAIN_IMAGE_COUNT != "ALL")  and (imageCount > MAX_TRAIN_IMAGE_COUNT)):
+        imageCount = MAX_TRAIN_IMAGE_COUNT * 2 #Reading twice the files of Max allowed set so that post filtering we get required data set
         print(imageCount)
 
-    baseFilenameList = [i.split('.')[0] for i in imageList[:imageCount]]
+    baseFilenameList = [ i.split('.')[0] for i in imageList[:imageCount]]
     filterImageList = []
 
     for i in range(imageCount):
         if int(i%1000)==0:
-            print("Files Processed %d/%d",i,imageCount)
+            print("Files Processed %d/%d" %(i,imageCount))
         metaFilename = os.path.join(METADATA_DIR, '%s.json' % baseFilenameList[i])
         imageFilename = os.path.join(IMAGE_DIR, '%s.jpg' % baseFilenameList[i])
         if (os.path.isfile(metaFilename) and os.path.isfile(imageFilename)) == False:
@@ -38,13 +37,14 @@ def dataVisualization():
         quantity = metadata['EXPECTED_QUANTITY']
         binItemData = metadata["BIN_FCSKU_DATA"]
         itemTypeCount = len(binItemData)
-        filterImageList.append([baseFilenameList[i], quantity, itemTypeCount])
+        #filterImageList.append([baseFilenameList[i], quantity, itemTypeCount])
+        filterImageList.append([baseFilenameList[i], quantity])
 
-    image_df = pd.DataFrame(filterImageList, columns=["filename", "Quantity", "ItemTypeCount"])
+    image_df = pd.DataFrame(filterImageList, columns=["filename", "Quantity"])
     image_df["Quantity"].hist(xlabelsize=6, ylabelsize=6)
-    image_df["ItemTypeCount"].hist(xlabelsize=6, ylabelsize=6)
     plt.savefig(INTERMEDIATE_DIR+"ImageDistribution.jpg")
-    #plt.show()
+    plt.show(block=False)
+    plt.close()
 
 
     print("The distribution of the number of file as per Quanity for each image:")
@@ -69,8 +69,8 @@ def prepareTrainValidateTestSplitDataset(image_df, trainPercentage, validatePerc
 
     imageCount = image_df.shape[0]
 
-    if ((MAX_IMAGE_SET != "ALL")  and (imageCount > MAX_IMAGE_SET)):
-        imageCount = MAX_IMAGE_SET
+    if ((MAX_TRAIN_IMAGE_COUNT != "ALL")  and (imageCount > MAX_TRAIN_IMAGE_COUNT)):
+        imageCount = MAX_TRAIN_IMAGE_COUNT
         image_df = image_df.iloc[:imageCount]
         print("Image Count After Image Limit Count check ", image_df.shape[0])
 

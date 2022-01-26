@@ -1,17 +1,21 @@
 # Input Dataset
-IMAGE_DIR = "../ImageDataSet//bin-images"
-METADATA_DIR = "../ImageDataSet/metadata/"
+IMAGE_DIR = "../abid_challenge/dataset/data/bin-images-resize"
+METADATA_DIR = "../abid_challenge/dataset/data/metadata"
 RESIZED_IMAGE_DIR = "../ImageDataSet/bin-images_224/"
 RESIZED_IMAGE_DIR_HSV = "../ImageDataSet/bin-images_224_HSV/"
 
 # Dataset Split Filename
-INTERMEDIATE_DIR = "../output/"
-TRAIN_SET_FILENAME = INTERMEDIATE_DIR + "random_trainset.txt"
-VALIDATION_SET_FILENAME = INTERMEDIATE_DIR + "random_validationset.txt"
-TEST_SET_FILENAME = INTERMEDIATE_DIR + "random_testset.txt"
-TEST_SET_CLASS_BASED_FILENAME = INTERMEDIATE_DIR + "ClassBased_testset"
+INTERMEDIATE_DIR = "../snapshots/"
+TRAIN_SET_FILENAME = "random_trainset.txt"
+VALIDATION_SET_FILENAME = "random_validationset.txt"
+TEST_SET_FILENAME =  "random_testset.txt"
+TEST_SET_CLASS_BASED_FILENAME = "ClassBased_testset"
 
-MAX_IMAGE_SET = 25000 #"ALL"
+MAX_VAL_IMAGE_COUNT = 5000
+MAX_TEST_IMAGE_COUNT = 5000
+
+
+MAX_TRAIN_IMAGE_COUNT = 50000 #"ALL"
 MAX_ITEM_COUNT = 6
 MAX_ITEM_TYPE_COUNT = 3
 # AWS S3 Configuration Attributes

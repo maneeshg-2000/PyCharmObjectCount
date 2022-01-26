@@ -1,47 +1,30 @@
 # Imports
 import argparse
 import inspect
-from datetime import date
+import os.path
 
 import keras
 import tensorflow as tf
-from keras.callbacks import CSVLogger
 from keras.models import Model
 from keras.preprocessing import image
+from keras.utils.vis_utils import plot_model
 from sklearn.metrics import ConfusionMatrixDisplay
+from tensorflow import keras
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
-from DataLoadingUtils import TensorflowDataGenerator
 from common.ImageDataSetSplit import *
-
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
 
 model_dictionary = {m[0]:m[1] for m in inspect.getmembers(tf.keras.applications, inspect.isfunction)}
 model_names = model_dictionary.keys()
 
 parser = argparse.ArgumentParser(description='Image Object Counting Model')
-parser.add_argument('--model', '-m', metavar='MODEL', default='VGG16', choices=model_names, help='model architecture: ' + ' | '.join(model_names) + ' (default: VGG16)')
+parser.add_argument('--model', '-m', metavar='MODEL', default='InceptionResNetV2', choices=model_names, help='model architecture: ' + ' | '.join(model_names) + ' (default: ResNet50)')
 parser.add_argument('--epochs', default=10, type=int, metavar='N', help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N', help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch_size', default=10, type=int, metavar='N', help='mini-batch size (default: 32)')
+parser.add_argument('-b', '--batch_size', default=4, type=int, metavar='N', help='mini-batch size (default: 32)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float, metavar='LR', help='initial learning rate')
 parser.add_argument('--lrd','--learning-rate-decay-step', default=8, type=int, metavar='N', help='learning rate decay epoch')
-parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
+parser.add_argument('--momentum', default=0.1, type=float, metavar='M', help='momentum')
 parser.add_argument('--max-target', default=20, type=int, metavar='N', help='smaximum number of target images for validation (default: 20)')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float, metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int, metavar='N', help='print frequency (default: 10)')
@@ -50,23 +33,16 @@ parser.add_argument('--evaluate', default=False, type=bool, metavar='BOOL', help
 parser.add_argument('--pd','--prepare-data', action='store_true', help='Prepare Data for Model Evaluation')
 parser.add_argument('-j', '--workers', default=12, type=int, metavar='N', help='number of data loading workers (default: 12)')
 
-def oneTimeImageProcssing():
-    # Resize all images to 224x244, One time operation, so commenting call
-    #resizeImages()˳
-
-    # Convert RGB to HSV Images
-    #convertRGB2HSVImages()
-    return
-
 model_dictionary_modules = {m[0]:m[1] for m in inspect.getmembers(tf.keras.applications, inspect.ismodule)}
-
 
 def predictTestDataSet(modelname, model, filenameList):
     datafile = open(filenameList, "r")
     content_list = datafile.read().splitlines()
+    baseFilenameList = [i.split('.')[0] for i in content_list]
+
     testResult = []
 
-    for filename in content_list:
+    for filename in baseFilenameList:
         metaFilename = os.path.join(METADATA_DIR, ('%s.json' % filename))
         imageFilename = os.path.join(IMAGE_DIR, ('%s.jpg' % filename))
 
@@ -85,7 +61,7 @@ def predictTestDataSet(modelname, model, filenameList):
     testResultDF = pd.DataFrame(testResult, columns=["filename", "ActualQuantity", "PredictedQuantity"])
     return testResultDF
 
-def plotModelEvalMetric(modelName, trainMetricHistory, validationMetricHistory, metricName):
+def plotModelEvalMetric(path, trainMetricHistory, validationMetricHistory, metricName):
     # plotting training and validation metric
     #loss = history[metric]
     #val_loss = history['val_' + metric]
@@ -96,8 +72,21 @@ def plotModelEvalMetric(modelName, trainMetricHistory, validationMetricHistory, 
     plt.xlabel('Epochs')
     plt.ylabel(metricName)
     plt.legend()
-    plt.savefig(INTERMEDIATE_DIR+modelName+metricName+".jpg")
-    #plt.show()
+    plt.savefig(os.path.join(path, metricName +"."+"jpg"))
+    plt.show(block=False)
+    plt.close()
+
+
+def train_validate_test_split(df, train_percent=.8, validate_percent=.1, seed=None):
+    np.random.seed(seed)
+    perm = np.random.permutation(df.index)
+    m = len(df.index)
+    train_end = int(train_percent * m)
+    validate_end = int(validate_percent * m) + train_end
+    train = df.iloc[:train_end]
+    validate = df.iloc[train_end:validate_end]
+    test = df.iloc[validate_end:]
+    return train, validate, test
 
 def mainMenu():
     global args
@@ -106,10 +95,37 @@ def mainMenu():
     print(args)
 
     image_df = dataVisualization()
+    snapshot_path = os.path.join(INTERMEDIATE_DIR, args.model,)
+    os.makedirs(snapshot_path, exist_ok=True)
 
-    if(args.pd):
-        print("Calling Prepare Data")
-        prepareTrainValidateTestSplitDataset(image_df, 0.7,0.1,0.2)
+    print("Image Count before Filtering ", image_df.shape[0])
+    image_df = image_df[image_df['Quantity'] <= MAX_ITEM_COUNT]
+    print("Image Count After Filtering based on Max Item Count", image_df.shape[0])
+
+    train_df, val_df, test_df = train_validate_test_split(image_df)
+
+    train_df = train_df.iloc[:MAX_TRAIN_IMAGE_COUNT]
+    val_df = val_df.iloc[:MAX_VAL_IMAGE_COUNT]
+    test_df = test_df.iloc[:MAX_TEST_IMAGE_COUNT]
+
+    train_df = train_df.astype({"filename": str, "Quantity": str})
+    val_df = val_df.astype({"filename": str, "Quantity": str})
+    test_df = test_df.astype({"filename": str, "Quantity": str})
+
+    train_df['filename'] = train_df['filename'].astype(str) + ".jpg"
+    val_df['filename'] = val_df['filename'].astype(str) + ".jpg"
+    test_df['filename'] = test_df['filename'].astype(str) + ".jpg"
+
+    train_df['filename'].to_csv(os.path.join(snapshot_path,TRAIN_SET_FILENAME), sep=' ', index=False, header=False)
+    val_df['filename'].to_csv(os.path.join(snapshot_path,VALIDATION_SET_FILENAME), sep=' ', index=False, header=False)
+    test_df['filename'].to_csv(os.path.join(snapshot_path,TEST_SET_FILENAME), sep=' ', index=False, header=False)
+
+    for i in range(len(ClassTestFileName)):
+        tempDF = test_df[test_df['Quantity'] == str(i)]
+        tempDF['filename'].to_csv(os.path.join(snapshot_path, TEST_SET_CLASS_BASED_FILENAME + ClassTestFileName[i] + ".txt"), sep=' ', index=False, header=False)
+
+    print(train_df)
+    print(val_df)
 
     # create model
     print("=> creating model '{}'".format(args.model))
@@ -120,20 +136,18 @@ def mainMenu():
     base_model.summary()
 
     # Add a layer where input is the output of the  second last layer
-    x = tf.keras.layers.Dense(8, activation='softmax', name='predictions')(base_model.layers[-2].output)
+    x = tf.keras.layers.Dense(MAX_ITEM_COUNT+1, activation='softmax', name='predictions')(base_model.layers[-2].output)
 
     # Then create the corresponding model
     my_model = Model(inputs=base_model.input, outputs=x)
     my_model.summary()
 
-    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-        initial_learning_rate=args.lr,
+    lr_schedule = keras.optimizers.schedules.ExponentialDecay(
+        initial_learning_rate=0.1,
         decay_steps=10000,
-        decay_rate=args.lrd)
-    optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule, momentum=args.momentum)
-
-
-    my_model.compile(loss='mse',optimizer=optimizer, metrics=['accuracy', 'mse'])
+        decay_rate=1e-4)
+    optimizer = keras.optimizers.SGD(learning_rate=lr_schedule, momentum=0.9)
+    my_model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=["accuracy", "mse"])
 
     if args.resume:
         if os.path.isfile(args.resume):
@@ -151,30 +165,44 @@ def mainMenu():
             print("=> no checkpoint found at '{}'".format(args.resume))
             return
     else:
-        # checkpoint
+        datagen = ImageDataGenerator(featurewise_std_normalization=False, rescale=1. / 255, horizontal_flip=True, )
+
+        train_generator = datagen.flow_from_dataframe(
+            dataframe=train_df,
+            directory="../abid_challenge/dataset/data/bin-images-resize",
+            x_col="filename", y_col="Quantity", class_mode="categorical",
+            target_size=(224, 224), batch_size=args.batch_size)
+
+        val_generator = datagen.flow_from_dataframe(
+            dataframe=val_df,
+            directory="../abid_challenge/dataset/data/bin-images-resize",
+            x_col="filename", y_col="Quantity", class_mode="categorical",
+            target_size=(224, 224), batch_size=args.batch_size)
+
+
+        test_generator = datagen.flow_from_dataframe(
+            dataframe=test_df,
+            directory="../abid_challenge/dataset/data/bin-images-resize",
+            x_col="filename", y_col="Quantity", class_mode="categorical",
+            target_size=(224, 224), batch_size=args.batch_size)
+
+        STEP_SIZE_TRAIN = train_generator.n // train_generator.batch_size
+        STEP_SIZE_VALID = val_generator.n // val_generator.batch_size
+        STEP_SIZE_TEST = test_generator.n // test_generator.batch_size
+
         callbacks_list = [
-            #tf.keras.callbacks.EarlyStopping(patience=2),
-            tf.keras.callbacks.ModelCheckpoint(
-                filepath=os.path.join("./",date.today().strftime("%m-%d-%Y"),'model.{epoch:02d}-{mse:.2f}.h5'),
-                monitor='val_accuracy',
-                verbose=1,
-                save_best_only=True,
-                mode='max'),
-            tf.keras.callbacks.TensorBoard(log_dir='./logs'),
-            CSVLogger((INTERMEDIATE_DIR + args.model +"_trainHistory.csv"), separator=',', append=False)
+            tf.keras.callbacks.CSVLogger(os.path.join(snapshot_path,"trainHistory.csv"), separator=',', append=False),
+            tf.keras.callbacks.ProgbarLogger(count_mode='steps')
         ]
 
-        training_generator = TensorflowDataGenerator(IMAGE_DIR,TRAIN_SET_FILENAME,args.model,args.batch_size)
-        validation_generator = TensorflowDataGenerator(IMAGE_DIR,VALIDATION_SET_FILENAME,args.model,args.batch_size)
+        hist = my_model.fit(
+            x=train_generator, batch_size=train_generator.batch_size, epochs=args.epochs, verbose=1,
+            callbacks=callbacks_list, validation_data=val_generator, shuffle=True,
+            class_weight=None, sample_weight=None, initial_epoch=args.start_epoch, steps_per_epoch=STEP_SIZE_TRAIN,
+            validation_steps=STEP_SIZE_VALID, validation_batch_size=val_generator.batch_size, validation_freq=1,
+            max_queue_size=12, workers=args.workers, use_multiprocessing=False
+        )
 
-        hist = my_model.fit(x=training_generator,
-                    validation_data=validation_generator,
-                    epochs=args.epochs,
-                    verbose=1,
-                    use_multiprocessing=False,
-                    callbacks=callbacks_list,
-                    initial_epoch= args.start_epoch,
-                    workers=args.workers)
         train_history = hist.history
 
         print('Final training loss \t', str(round((hist.history['loss'][-1]),2))+ ' %')
@@ -182,27 +210,36 @@ def mainMenu():
         print('Final Validation loss \t', str(round((hist.history['val_loss'][-1]),2))+ ' %')
         print('Final Validation accuracy ', str(round((hist.history['val_accuracy'][-1]*100),2))+ '%')
 
-        os.makedirs(INTERMEDIATE_DIR, exist_ok=True)
-        my_model.save((INTERMEDIATE_DIR + args.model +".h5"))
 
-    plotModelEvalMetric(args.model,train_history["loss"],train_history["val_loss"], 'loss')
-    plotModelEvalMetric(args.model,train_history["accuracy"],train_history["val_accuracy"], 'accuracy')
-    plotModelEvalMetric(args.model,train_history["mse"],train_history["val_mse"], 'mse')
+        my_model.save( os.path.join(snapshot_path, args.model + "." + "h5"))
+        plot_model(my_model, to_file= os.path.join(snapshot_path, args.model + "." + "png"), show_shapes=True, show_layer_names=True)
 
-    testResultDF = predictTestDataSet(args.model, my_model, TEST_SET_FILENAME)
-    testResultDF.to_csv(INTERMEDIATE_DIR +"allClassResult.csv", sep=',', index=False, header=True)
+    plotModelEvalMetric(snapshot_path,train_history["loss"],train_history["val_loss"], 'loss')
+    plotModelEvalMetric(snapshot_path,train_history["accuracy"],train_history["val_accuracy"], 'accuracy')
+    plotModelEvalMetric(snapshot_path,train_history["mse"],train_history["val_mse"], 'mse')
+
+    score = my_model.evaluate(x=test_generator, batch_size=args.batch_size, verbose=1, steps=STEP_SIZE_TEST,
+                              workers=1, use_multiprocessing=False
+    )
+
+    print('Test loss:', score[0])
+    print('Test accuracy:', score[1])
+
+    testResultDF = predictTestDataSet(args.model, my_model, os.path.join(snapshot_path,TEST_SET_FILENAME))
+    testResultDF.to_csv(os.path.join(snapshot_path,"allClassResult.csv"), sep=',', index=False, header=True)
 
     ConfusionMatrixDisplay.from_predictions(testResultDF["ActualQuantity"], testResultDF["PredictedQuantity"])
-    plt.savefig(INTERMEDIATE_DIR+args.model+"AllClassResultConfMetric.jpg")
+    plt.savefig(os.path.join(snapshot_path,"AllClassResultConfMetric.jpg"))
 
     for i in range(len(ClassTestFileName)):
-        testResultDF = predictTestDataSet(args.model, my_model,
-                                          (TEST_SET_CLASS_BASED_FILENAME + ClassTestFileName[i] + ".txt"))
-        testResultDF.to_csv((TEST_SET_CLASS_BASED_FILENAME + ClassTestFileName[i] + "result.csv"), sep=',', index=False,
-                            header=True)
+        testResultDF = predictTestDataSet(args.model, my_model,os.path.join(snapshot_path,
+                                          (TEST_SET_CLASS_BASED_FILENAME + ClassTestFileName[i] + ".txt")))
+        testResultDF.to_csv(os.path.join(snapshot_path,
+                                         (TEST_SET_CLASS_BASED_FILENAME+ClassTestFileName[i] + "result.csv")),
+                            sep=',', index=False,header=True)
         if(testResultDF.shape[0]):
             ConfusionMatrixDisplay.from_predictions(testResultDF["ActualQuantity"], testResultDF["PredictedQuantity"])
-            plt.savefig(INTERMEDIATE_DIR + args.model + ClassTestFileName[i]+"ConfMetric.jpg")
+            plt.savefig(os.path.join(snapshot_path , (TEST_SET_CLASS_BASED_FILENAME+ClassTestFileName[i]+"ConfMetric.jpg")))
 
 
 # Press the green button in the gutter to run the script.

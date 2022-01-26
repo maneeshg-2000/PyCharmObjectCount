@@ -13,7 +13,8 @@ model_dictionary = {m[0]:m[1] for m in inspect.getmembers(tf.keras.applications,
 
 def default_loader(path,modelName):
     img = image.load_img(path, target_size=(224, 224))
-    x = image.img_to_array(img)
+    img1= tf.image.random_flip_left_right(img, 6)
+    x = image.img_to_array(img1)
     #x = np.expand_dims(x, axis=0)
     x = model_dictionary[modelName.lower()].preprocess_input(x)
     return x
